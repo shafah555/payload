@@ -326,7 +326,10 @@ let preparedRows = [];  // [{entryId: value, ...}] per excel row
 let lastSubmittedIndex = -1;
 
 function getPrefilledViewFormUrl(){
-  return formActionUrl.replace(/\/formResponse(?:\?.*)?$/, '/viewform');
+  const actionUrl = new URL(formActionUrl);
+  actionUrl.pathname = actionUrl.pathname.replace(/\/formResponse$/, '/viewform');
+  actionUrl.search = '';
+  return actionUrl.toString();
 }
 
 // ---------- PRELOADED PAYLOAD (Fusion_Flow_Registrations_500.xlsx) ----------
@@ -541,9 +544,9 @@ function submitRow(i){
   const statusEl = document.getElementById('status-' + i);
   lastSubmittedIndex = i;
 
-  // Open the editable form instead of POSTing to formResponse. This keeps every
-  // click on the prefilled viewform page and never creates a response.
-  const targetName = 'gformAutofillView';
+  // Open a fresh editable form instead of POSTing to formResponse. A fresh
+  // target prevents a previous Google error page from being reused.
+  const targetName = '_blank';
 
   const form = document.createElement('form');
   form.action = getPrefilledViewFormUrl();
