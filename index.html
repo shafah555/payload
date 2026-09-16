@@ -303,19 +303,10 @@
   <div class="stage collapsed locked" id="stage4">
     <div class="stage-head"><span class="stage-num">4</span><span class="stage-title">সারি ধরে ধরে সাবমিট করুন</span></div>
     <div class="stage-body">
-      <div class="warn-box">প্রতিটা "Submit" চাপলে সরাসরি আপনার Google Form-এ একটা রেসপন্স জমা হবে — undo করা যাবে না। প্রথমে ২-১টা সারি টেস্ট করে ফর্মের রেসপন্স শিটে গিয়ে মিলিয়ে দেখে নিন। <b>নিচে "নতুন ট্যাবে টেস্ট" চালু থাকলে</b> প্রথম কয়েকটা সাবমিশন Google-এর নিজের কনফার্মেশন পেজে খুলবে, যাতে আসলেই জমা হচ্ছে কিনা চোখে দেখে নিশ্চিত হতে পারেন — কারণ কিছু ফর্মে Google একধরনের এককালীন টোকেন যোগ করে, যেটার কারণে বারবার একই তথ্য থেকে বানানো সাবমিশন প্রত্যাখ্যাত হতে পারে।</div>
-      <div class="toolbar">
-        <label style="display:flex; align-items:center; gap:6px; font-size:13.5px; color:var(--muted);">
-          <input type="checkbox" id="visibleTestMode" checked style="width:auto;"> নতুন ট্যাবে টেস্ট (দেখে নিশ্চিত হওয়ার জন্য)
-        </label>
-      </div>
+      <div class="warn-box">প্রতিটা "Submit" চাপলে নতুন রেসপন্স জমা হবে না — Google Form-এর prefilled viewform পেজ খুলবে। সেখানে তথ্য দেখে প্রয়োজনে Google-এর নিজস্ব Submit বোতাম চাপলেই কেবল রেসপন্স জমা হবে।</div>
       <div class="toolbar">
         <button class="ghost tiny" id="submitAllBtn">সব সারি একে একে সাবমিট করুন</button>
         <span id="submitAllMsg" class="hint" style="margin:0;"></span>
-      </div>
-      <div id="responsePreviewWrap" style="margin:14px 0;">
-        <p class="hint" style="margin-bottom:6px;">সর্বশেষ সাবমিশনের পর Google-এর রেসপন্স পেজ এখানে দেখা যাবে (নিচে):</p>
-        <iframe name="hiddenSubmitFrame" id="hiddenSubmitFrame" style="width:100%; height:260px; border:1px solid var(--line); border-radius:4px; background:#fff;"></iframe>
       </div>
       <div id="rowsWrap"></div>
     </div>
@@ -334,16 +325,9 @@ let formActionUrl = "";
 let preparedRows = [];  // [{entryId: value, ...}] per excel row
 let lastSubmittedIndex = -1;
 
-document.getElementById('hiddenSubmitFrame').addEventListener('load', () => {
-  if(lastSubmittedIndex < 0) return; // ignore the frame's initial blank load
-  const statusEl = document.getElementById('status-' + lastSubmittedIndex);
-  if(statusEl){
-    statusEl.textContent = 'রেসপন্স পেয়েছে ✓';
-    statusEl.classList.remove('pending');
-    statusEl.classList.add('sent');
-  }
-});
-
+function getPrefilledViewFormUrl(){
+  return formActionUrl.replace(/\/formResponse(?:\?.*)?$/, '/viewform');
+}
 
 // ---------- PRELOADED PAYLOAD (Fusion_Flow_Registrations_500.xlsx) ----------
 // Data + field mapping already baked in, so Stage 1-3 are skipped and we
@@ -554,19 +538,16 @@ function escapeHtml(s){
 
 function submitRow(i){
   const entryValues = preparedRows[i];
-  const visible = document.getElementById('visibleTestMode').checked;
   const statusEl = document.getElementById('status-' + i);
   lastSubmittedIndex = i;
 
-  // Use a fresh, uniquely-named target for each visible submission and let the
-  // <form target="_blank">-style submit open it directly. This is far less
-  // likely to be silently blocked than a separate window.open() call, which
-  // many mobile/in-app browsers block outright with no warning at all.
-  const targetName = visible ? ('gformTestTab_' + i + '_' + Date.now()) : 'hiddenSubmitFrame';
+  // Open the editable form instead of POSTing to formResponse. This keeps every
+  // click on the prefilled viewform page and never creates a response.
+  const targetName = 'gformAutofillView';
 
   const form = document.createElement('form');
-  form.action = formActionUrl;
-  form.method = 'POST';
+  form.action = getPrefilledViewFormUrl();
+  form.method = 'GET';
   form.target = targetName;
 
   Object.entries(entryValues).forEach(([entryId, value]) => {
@@ -580,37 +561,14 @@ function submitRow(i){
   document.body.appendChild(form);
   form.submit();
   setTimeout(() => document.body.removeChild(form), 500);
-
-  // After the browser has had a moment to actually open the tab (form submit
-  // triggers this natively), check whether it worked. If it didn't, tell the
-  // person plainly instead of leaving them staring at nothing happening.
-  if(visible){
-    setTimeout(() => {
-      const opened = window.open('', targetName);
-      if(!opened || opened.closed){
-        statusEl.textContent = 'ট্যাব ব্লকড ⚠';
-        statusEl.classList.remove('pending','sent');
-        statusEl.style.color = 'var(--err)';
-        alert('ব্রাউজার নতুন ট্যাব খুলতে দেয়নি (পপ-আপ ব্লকড)। ঠিকানার বারে পপ-আপ ব্লক আইকনে ক্লিক করে এই সাইটের জন্য Allow করুন, তারপর আবার Submit চাপুন। এখনো একই সমস্যা হলে "নতুন ট্যাবে টেস্ট" বক্সটা আনচেক করে সরাসরি সাবমিট করুন — নিচের রেসপন্স বক্সে ফলাফল দেখা যাবে।');
-        return;
-      }
-      statusEl.textContent = 'ট্যাবে দেখুন ↗';
-      statusEl.classList.remove('pending');
-      statusEl.classList.add('sent');
-    }, 300);
-  }else{
-    statusEl.textContent = 'পাঠানো হয়েছে ✓';
-    statusEl.classList.remove('pending');
-    statusEl.classList.add('sent');
-  }
+  statusEl.textContent = 'অটোফিল ফর্ম খোলা হয়েছে ↗';
+  statusEl.classList.remove('pending');
+  statusEl.classList.add('sent');
 }
 
 document.getElementById('submitAllBtn').addEventListener('click', async () => {
   const btn = document.getElementById('submitAllBtn');
   const msg = document.getElementById('submitAllMsg');
-  if(document.getElementById('visibleTestMode').checked){
-    if(!confirm('"নতুন ট্যাবে টেস্ট" চালু আছে — এভাবে সব সারি পাঠালে অনেকগুলো ট্যাব খুলে যাবে। ২-১টা সারি টেস্ট করে নিশ্চিত হয়ে থাকলে, বক্সটা বন্ধ করে তারপর আবার চাপুন। এখনই চালিয়ে যাবেন?')) return;
-  }
   btn.disabled = true;
   for(let i = 0; i < preparedRows.length; i++){
     submitRow(i);
